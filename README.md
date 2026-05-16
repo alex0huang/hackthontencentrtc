@@ -1,111 +1,107 @@
-# SecReviewer 🛡️
+# AdaL Security Guard 🛡️
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Powered by AdaL](https://img.shields.io/badge/Powered%20by-AdaL-ec4899)](https://adalagent.ai)
-[![GitHub stars](https://img.shields.io/github/stars/your-org/sec-reviewer?style=social)](#)
 
-> **AI-powered security review for every Pull Request.** Drop in one YAML file, get a senior security engineer on every PR.
-
-![SecReviewer demo](./docs/demo.gif)
-<!-- Replace docs/demo.gif with your real recording -->
+> **AI-powered security review on every `git push`.** One install command — AdaL reviews your diff, blocks risky pushes, and posts the review as a commit comment on GitHub.
 
 ---
 
 ## ✨ Features
 
-- 🤖 **AI-driven, not regex** — uses [AdaL](https://adalagent.ai) to reason about code, trace data flow, and explain *why* a finding matters
-- 🔴 **Severity-grouped output** — Critical / Warnings / Suggestions, each with file:line + suggested fix + OWASP link
-- 💬 **Native PR comments** — no separate dashboard, results show up where developers already work
-- ⚡ **Zero config** — one YAML file, one secret, done
-- 🧪 **Demo samples included** — `examples/` ships intentionally vulnerable code so you can verify the reviewer works
+- 🤖 **AI-driven, not regex** — [AdaL](https://adalagent.ai) reasons about data flow and explains *why* a finding matters
+- 🚧 **Fail-closed pre-push hook** — risky diffs are blocked before they reach the remote
+- 💬 **Auto commit comments** — the review is posted to the pushed commit on GitHub (via `gh` CLI)
+- 🗑️ **Catches risky deletions** — flags removed auth checks, validation, security headers, etc.
+- ⚡ **One-line install** — no API keys, no CI config
 
 ---
 
 ## 🚀 Quick Start
 
-**1. Add the workflow** to your repo at `.github/workflows/sec-review.yml`:
+### Prerequisites
+- **Node.js ≥ 20** (`node -v`)
+- **Git** (you're in a git repo)
+- **[AdaL CLI](https://adalagent.ai)** session — first run launches login
+- *(optional, for commit comments)* **[GitHub CLI](https://cli.github.com)** authenticated: `gh auth login`
+
+### Install (run inside any git repo)
 
 ```bash
-mkdir -p .github/workflows
-curl -o .github/workflows/sec-review.yml \
-  https://raw.githubusercontent.com/your-org/sec-reviewer/main/install/sec-review.yml
+curl -fsSL https://raw.githubusercontent.com/alex0huang/hackthonadal/test/sec-comment-feature/install.sh | bash
 ```
 
-**2. Add your AdaL API key** at *Settings → Secrets and variables → Actions*:
+What it does:
+1. Verifies prerequisites (git, Node ≥ 20)
+2. Installs `@sylphai/adal-cli` globally if missing
+3. Triggers first-time AdaL login (interactive)
+4. Installs a `pre-push` hook in `.git/hooks/pre-push`
 
-| Name                  | Value                                                                |
-| --------------------- | -------------------------------------------------------------------- |
-| `ADAL_API_KEY`       | Get one at [adal.sylph.ai](https://adal.sylph.ai) (uses your AdaL account quota) |
+### Use it
 
-**3. Open a PR.** SecReviewer comments automatically.
+Just `git push` as usual. You'll see:
 
----
-
-## 📋 Example Output
-
-```markdown
-# 🛡️ SecReviewer Report
-
-## 🔴 Critical Issues
-- **src/auth.py:23** — SQL injection: user input concatenated into query.
-  Fix: use parameterized queries — `cursor.execute("... WHERE u = ?", (user,))`
-- **src/config.js:8** — Hardcoded Stripe API key (`sk_live_...`).
-  Fix: move to env var, rotate the key, scrub git history.
-
-## 🟠 Warnings
-- **src/upload.py:45** — Path traversal possible. Validate filename against base dir.
-
-## 💡 Suggestions
-- Consider adding `Content-Security-Policy` header to `app.py:12`.
-
-## 👀 Human Review Needed?
-**YES** — credential leak and SQLi must be fixed before merge.
-
-## 📚 Learn More
-- SQL Injection — https://owasp.org/www-community/attacks/SQL_Injection
-- Hardcoded Credentials — https://cwe.mitre.org/data/definitions/798.html
 ```
+[adal-guard] 🛡️  Running AdaL security review before pushing to origin...
+[adal-guard] Calling adal (may take 30-90s)...
+
+===== AdaL Security Review =====
+VERDICT: PASS
+...
+================================
+
+[adal-guard] ✅ Security review passed.
+[adal-guard] 💬 Comment will be posted on owner/repo@<sha> after push completes.
+```
+
+The review then appears as a **commit comment** on GitHub within ~5–20 seconds.
 
 ---
 
 ## 🛡️ What it catches
 
-| Category                   | Examples                                            |
-| -------------------------- | --------------------------------------------------- |
-| **Injection**              | SQLi, XSS, command injection, path traversal        |
-| **Secrets**                | API keys, DB passwords, JWT secrets in source       |
-| **Auth**                   | Broken auth flows, missing authorization checks     |
-| **Crypto**                 | Weak algorithms, hardcoded IVs, MD5/SHA1 misuse     |
-| **Deserialization**        | `pickle`, unsafe `JSON.parse`, YAML `load`          |
-| **CORS / CSP**             | Wildcard origins, missing security headers          |
-| **Sensitive data exposure**| PII / credentials in logs, debug output             |
+| Category | Examples |
+| --- | --- |
+| **Injection** | SQLi, XSS, command injection, path traversal |
+| **Secrets** | API keys, DB passwords, JWT secrets in source |
+| **Auth** | Broken auth flows, missing authorization checks |
+| **Crypto** | Weak algorithms, hardcoded IVs, MD5/SHA1 misuse |
+| **Deserialization** | `pickle`, unsafe `JSON.parse`, YAML `load` |
+| **Risky deletions** | Removed auth checks, validation, security headers, audit logs |
 
 ---
 
-## 🔧 Configuration
+## 📋 Verdicts
 
-Required:
-
-- `ADAL_API_KEY` — your [AdaL API key](https://adal.sylph.ai) (routes Claude via your AdaL account quota).
-
-Optional (edit the workflow YAML directly):
-
-- Trigger branches (default: `main`, `master`)
-- Custom prompt — tailor for your stack, compliance framework (PCI/HIPAA/SOC2), or specific CWEs
-- Output filtering — change severity thresholds in the prompt
+| Verdict | Behavior |
+| --- | --- |
+| `VERDICT: PASS` | Push proceeds. Comment posted to commit (if `gh` available). |
+| `VERDICT: BLOCK` | Push aborted (fail-closed). Comment still posted. Bypass: `git push --no-verify`. |
+| AdaL error / no verdict | Push aborted (fail-closed). |
 
 ---
 
-## 🗺️ Roadmap — The AdaL Expert Pack
+## 💬 Commit Comments (optional)
 
-SecReviewer is the first of a family. Same install pattern, different specialty:
+Comments require [`gh` CLI](https://cli.github.com) installed and authenticated:
 
-- 🛡️ **SecReviewer** — Security review *(shipped)*
-- ⚡ **PerfReviewer** — N+1 queries, slow regex, memory leaks *(next)*
-- 🎨 **StyleReviewer** — Codebase-aware style + naming consistency *(next)*
-- 📊 **SecReviewer Hub** — Org-wide dashboard, severity trends *(concept)*
+```bash
+gh auth login   # GitHub.com → HTTPS → web browser
+```
 
-Have an idea for the Pack? Open an issue.
+If `gh` is missing or unauthenticated, the hook skips commenting silently — your push is unaffected.
+
+Logs (including comment-post status): `~/.adal/sec-review.log`
+
+---
+
+## 🔧 Uninstall
+
+```bash
+rm .git/hooks/pre-push
+```
+
+To bypass once without uninstalling: `git push --no-verify`.
 
 ---
 
