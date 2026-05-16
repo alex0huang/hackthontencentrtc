@@ -1,0 +1,97 @@
+name: SecReviewer
+
+on:
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  security-review:
+    name: AI Security Review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install AdaL CLI
+        run: npm install -g @sylphai/adal-cli
+
+      - name: Get PR diff
+        id: get-diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > pr.diff
+          DIFF_SIZE=$(wc -l < pr.diff)
+          echo "diff_size=$DIFF_SIZE" >> $GITHUB_OUTPUT
+          echo "Diff size: $DIFF_SIZE lines"
+
+      - name: Run SecReviewer
+        if: steps.get-diff.outputs.diff_size != '0'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cat pr.diff | adal -q "$(cat <<'PROMPT'
+          You are a senior security engineer performing code review.
+          Review ONLY for security issues. Ignore style and performance.
+
+          Focus on:
+          1. Injection vulnerabilities (SQL, XSS, command injection, path traversal)
+          2. Authentication and authorization flaws
+          3. Hardcoded secrets, API keys, credentials
+          4. Sensitive data exposure (PII, credentials in logs)
+          5. Insecure dependencies or known CVE patterns
+          6. CORS/CSP misconfigurations
+          7. Insecure deserialization
+          8. Cryptographic weaknesses
+
+          Output format (Markdown):
+
+          ## 🔴 Critical Issues
+          [List critical issues with file:line references. If none, write "None found."]
+
+          ## 🟠 Warnings
+          [List medium-severity issues. If none, write "None found."]
+
+          ## 💡 Suggestions
+          [Hardening recommendations. If none, write "None."]
+
+          ## 👀 Human Review Needed?
+          [Answer: YES or NO, with one sentence reason. YES if any Critical issues exist.]
+
+          ## 📚 Learn More
+          [For each issue type found, add 1 line + relevant OWASP link]
+
+          If absolutely no security concerns found, output only:
+          "✅ No security issues detected in this change."
+          PROMPT
+          )" --yolo > review.md
+
+          echo "Review generated:"
+          cat review.md
+
+      - name: Post review comment
+        if: steps.get-diff.outputs.diff_size != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const review = fs.readFileSync('review.md', 'utf8');
+            const body = `# 🛡️ SecReviewer Report\n\n${review}\n\n---\n_Powered by [AdaL](https://adalagent.ai) · [SecReviewer](https://github.com/${context.repo.owner}/${context.repo.repo})_`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
