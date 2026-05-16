@@ -92,13 +92,41 @@ if [ "${#DIFF}" -gt "$MAX" ]; then
 [...diff truncated for review...]"
 fi
 
-PROMPT="You are a strict security reviewer. Review the following git diff and identify any security issues (secrets, SQL injection, command injection, unsafe deserialization, weak crypto, hardcoded credentials, path traversal, SSRF, XSS, etc.).
+PROMPT="You are a strict security reviewer for a git pre-push hook. Review the diff below for TWO categories of risk:
 
-Respond on the FIRST LINE with exactly one of:
-VERDICT: PASS    (if no Critical/High issues)
-VERDICT: BLOCK   (if any Critical/High issues found)
+== CATEGORY A: Newly introduced vulnerabilities (added '+' lines) ==
+Hardcoded secrets/credentials, SQL/command injection, unsafe deserialization, weak crypto,
+path traversal, SSRF, XSS, insecure auth, RCE sinks, etc.
 
-Then list findings with severity, file, and brief explanation.
+== CATEGORY B: Risky DELETIONS (removed '-' lines) ==
+Pay SPECIAL attention to deleted lines. Treat as Critical/High when the deletion removes:
+  1. Authentication / authorization checks (login required, role checks, permission guards)
+  2. Input validation, sanitization, or escaping
+  3. CSRF / XSS protections, security headers, CORS restrictions
+  4. Cryptographic operations (signature verification, hash compare, TLS settings)
+  5. Rate limiting, audit logging, or security-relevant logging
+  6. Security tests / assertions
+  7. Secret-handling code (env-var loads, secret rotation)
+  8. Access-control middleware, guards, decorators
+  9. Error handling around security-sensitive operations
+ 10. SECURITY.md, security policies, or comments warning of security risk
+ 11. Files entirely deleted that match patterns: *security*, *auth*, *guard*, *.env.example,
+     SECURITY.md, *permission*, *acl* — flag as High and ask for confirmation
+
+For each removed control, explain WHY removing it is dangerous and ask whether the deletion
+is intentional with a documented replacement.
+
+== OUTPUT FORMAT ==
+FIRST LINE must be exactly one of:
+VERDICT: PASS    (no Critical/High issues in either category)
+VERDICT: BLOCK   (any Critical/High issue, including risky deletions)
+
+Then list findings under these sections (omit empty ones):
+### 🆕 New Vulnerabilities
+### 🗑️  Risky Deletions
+### ℹ️  Notes / Suggestions
+
+Each finding: severity, file:line, what changed (added/removed), why it matters, suggested fix.
 
 DIFF:
 $DIFF"
