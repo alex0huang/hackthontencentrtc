@@ -50,35 +50,41 @@ cat > "$HOOK_PATH" <<'HOOK'
 #!/usr/bin/env bash
 # AdaL Security Guard — pre-push hook
 # Aborts push if AdaL flags critical security issues in the diff.
+# Designed to work both in interactive shells AND non-TTY environments
+# (e.g., when an AI agent runs `git push` via a subprocess).
 set -euo pipefail
 
+LOG_FILE="${HOME}/.adal/sec-review.log"
+mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+
+# All user-facing messages go to stderr so they survive stdout capture/redirection.
+say() { echo "[adal-guard] $*" >&2; echo "[adal-guard] $*" >> "$LOG_FILE" 2>/dev/null || true; }
+
 if ! command -v adal >/dev/null 2>&1; then
-  echo "[adal-guard] adal not found on PATH; skipping security review." >&2
+  say "adal not found on PATH; skipping security review."
   exit 0
 fi
 
-REMOTE="$1"; URL="$2"
-echo "[adal-guard] Running security review before pushing to $REMOTE ($URL)..."
+REMOTE="${1:-origin}"; URL="${2:-unknown}"
+say "🛡️  Running AdaL security review before pushing to $REMOTE ($URL)..."
 
-# Collect ranges being pushed: <local_ref> <local_sha> <remote_ref> <remote_sha>
+# Read ref list from git on stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>
 DIFF=""
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
   if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
-    RANGE="$local_sha"        # new branch — review tip commit
-    DIFF+="$(git show --no-color "$local_sha")"$'\n'
+    DIFF+="$(git show --no-color "$local_sha" 2>/dev/null || true)"$'\n'
   else
-    RANGE="$remote_sha..$local_sha"
-    DIFF+="$(git diff --no-color "$RANGE")"$'\n'
+    DIFF+="$(git diff --no-color "$remote_sha..$local_sha" 2>/dev/null || true)"$'\n'
   fi
 done
 
 if [ -z "${DIFF// }" ]; then
-  echo "[adal-guard] No diff to review; allowing push."
+  say "No diff to review; allowing push."
   exit 0
 fi
 
-# Truncate very large diffs to keep prompt reasonable (~200KB)
+# Truncate very large diffs (~200KB) so the prompt stays sane.
 MAX=200000
 if [ "${#DIFF}" -gt "$MAX" ]; then
   DIFF="${DIFF:0:$MAX}
@@ -86,32 +92,60 @@ if [ "${#DIFF}" -gt "$MAX" ]; then
 [...diff truncated for review...]"
 fi
 
-PROMPT='You are a strict security reviewer. Review the following git diff and identify any security issues (secrets, SQL injection, command injection, unsafe deserialization, weak crypto, hardcoded credentials, path traversal, SSRF, XSS, etc.).
+PROMPT="You are a strict security reviewer. Review the following git diff and identify any security issues (secrets, SQL injection, command injection, unsafe deserialization, weak crypto, hardcoded credentials, path traversal, SSRF, XSS, etc.).
 
-Respond in this exact format on the first line:
+Respond on the FIRST LINE with exactly one of:
 VERDICT: PASS    (if no Critical/High issues)
-or
 VERDICT: BLOCK   (if any Critical/High issues found)
 
 Then list findings with severity, file, and brief explanation.
 
 DIFF:
-'"$DIFF"
+$DIFF"
 
-OUTPUT="$(printf '%s' "$PROMPT" | adal -q "$(cat)" --yolo --output text 2>&1 || true)"
+say "Calling adal (may take 30-90s)..."
 
-echo "----- AdaL Security Review -----"
-echo "$OUTPUT"
-echo "--------------------------------"
+# Pass prompt as argument (not via stdin) — works reliably without a TTY.
+# Capture exit code separately so we can fail-closed on adal errors.
+set +e
+OUTPUT="$(adal -q "$PROMPT" --yolo --output text 2>&1 </dev/null)"
+ADAL_EXIT=$?
+set -e
 
-if printf '%s' "$OUTPUT" | grep -qE '^VERDICT:[[:space:]]*BLOCK'; then
-  echo "[adal-guard] ❌ Push BLOCKED by AdaL security review." >&2
-  echo "[adal-guard] Fix the issues above, or bypass with: git push --no-verify" >&2
+# Echo full review to stderr (visible to humans AND agents) and to log file.
+{
+  echo ""
+  echo "===== AdaL Security Review ====="
+  echo "$OUTPUT"
+  echo "================================"
+  echo ""
+} >&2
+echo "$OUTPUT" >> "$LOG_FILE" 2>/dev/null || true
+
+# Fail-closed: any adal failure → BLOCK (previous version silently allowed).
+if [ "$ADAL_EXIT" -ne 0 ]; then
+  say "❌ adal exited with code $ADAL_EXIT. Push BLOCKED (fail-closed)."
+  say "   See log: $LOG_FILE"
+  say "   Bypass:  git push --no-verify"
   exit 1
 fi
 
-echo "[adal-guard] ✅ Security review passed."
-exit 0
+if printf '%s' "$OUTPUT" | grep -qE '^VERDICT:[[:space:]]*BLOCK'; then
+  say "❌ Critical security issues found. Push BLOCKED."
+  say "   Bypass: git push --no-verify"
+  exit 1
+fi
+
+if printf '%s' "$OUTPUT" | grep -qE '^VERDICT:[[:space:]]*PASS'; then
+  say "✅ Security review passed."
+  exit 0
+fi
+
+# No verdict line at all → adal output was malformed/empty. Fail-closed.
+say "⚠️  No VERDICT line in adal output. Push BLOCKED (fail-closed)."
+say "   See log: $LOG_FILE"
+say "   Bypass:  git push --no-verify"
+exit 1
 HOOK
 
 chmod +x "$HOOK_PATH"
