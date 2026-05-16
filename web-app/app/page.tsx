@@ -50,6 +50,8 @@ jobs:
 export default function Home() {
   const [copied, setCopied] = useState(false);
   const [copiedOneClick, setCopiedOneClick] = useState(false);
+  const [repoUrl, setRepoUrl] = useState('');
+  const [installError, setInstallError] = useState('');
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(INSTALL_YAML);
@@ -65,6 +67,90 @@ export default function Home() {
 
   const scrollToInstall = () => {
     document.getElementById('install')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Parse "owner/repo" or full GitHub URL → { owner, repo }
+  const parseRepo = (input: string): { owner: string; repo: string } | null => {
+    const trimmed = input.trim().replace(/\.git$/, '').replace(/\/$/, '');
+    const urlMatch = trimmed.match(/github\.com[/:]([^/]+)\/([^/]+)/);
+    if (urlMatch) return { owner: urlMatch[1], repo: urlMatch[2] };
+    const slashMatch = trimmed.match(/^([^/\s]+)\/([^/\s]+)$/);
+    if (slashMatch) return { owner: slashMatch[1], repo: slashMatch[2] };
+    return null;
+  };
+
+  const [installing, setInstalling] = useState(false);
+
+  const handleInstall = async () => {
+    setInstallError('');
+    const parsed = parseRepo(repoUrl);
+    if (!parsed) {
+      setInstallError('Enter a repo as "owner/name" or a GitHub URL');
+      return;
+    }
+
+    // Open popup synchronously to avoid popup-blocker (we'll set its URL after async fetch)
+    const popup = window.open('about:blank', '_blank');
+
+    setInstalling(true);
+    let branch = 'main';
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${parsed.owner}/${parsed.repo}`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        branch = data.default_branch || 'main';
+        // Verify the default branch actually exists (uninitialized repos have no branch
+        // even though the API returns default_branch="main"). /new/{branch} silently
+        // redirects to repo home if the branch doesn't exist.
+        const branchRes = await fetch(
+          `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/branches/${branch}`,
+        );
+        if (branchRes.status === 404) {
+          setInstallError(
+            `Repo "${parsed.owner}/${parsed.repo}" has no "${branch}" branch yet. Push at least one commit, then try again.`,
+          );
+          popup?.close();
+          setInstalling(false);
+          return;
+        }
+      } else if (res.status === 404) {
+        setInstallError(`Repo not found: ${parsed.owner}/${parsed.repo}. Is it public?`);
+        popup?.close();
+        setInstalling(false);
+        return;
+      }
+    } catch {
+      // Network error — fall back to "main" and let GitHub redirect handle it
+    }
+    setInstalling(false);
+
+    const url =
+      `https://github.com/${parsed.owner}/${parsed.repo}/new/${branch}` +
+      `?filename=${encodeURIComponent('.github/workflows/sec-review.yml')}` +
+      `&value=${encodeURIComponent(INSTALL_YAML)}` +
+      `&message=${encodeURIComponent('ci: add SecReviewer security review workflow')}` +
+      `&description=${encodeURIComponent('Adds AI-powered security review on every PR via AdaL.')}`;
+
+    if (popup) {
+      popup.location.href = url;
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const handleSecretsRedirect = () => {
+    const parsed = parseRepo(repoUrl);
+    if (!parsed) {
+      setInstallError('Enter your repo above first');
+      return;
+    }
+    window.open(
+      `https://github.com/${parsed.owner}/${parsed.repo}/settings/secrets/actions/new`,
+      '_blank',
+      'noopener,noreferrer',
+    );
   };
 
   return (
@@ -123,7 +209,55 @@ export default function Home() {
       {/* Install */}
       <section id="install" className="px-6 py-20 max-w-5xl mx-auto">
         <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">One-click install</h2>
-        <p className="text-center text-slate-400 mb-10">Copy, paste, ship. No SDK, no config.</p>
+        <p className="text-center text-slate-400 mb-10">Paste your repo, click Install. GitHub opens with the workflow pre-filled — just commit.</p>
+
+        {/* Quick install form */}
+        <div className="mb-10 p-6 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 border border-emerald-500/30">
+          <label className="block text-sm font-semibold text-emerald-300 mb-2">
+            🚀 Install to your repo
+          </label>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={repoUrl}
+              onChange={(e) => { setRepoUrl(e.target.value); setInstallError(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleInstall(); }}
+              placeholder="owner/repo  or  https://github.com/owner/repo"
+              className="flex-1 px-4 py-3 rounded-lg bg-slate-950 border border-slate-700 focus:border-emerald-500 focus:outline-none text-slate-100 font-mono text-sm placeholder-slate-600"
+            />
+            <button
+              onClick={handleInstall}
+              disabled={installing}
+              className="px-6 py-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-wait text-slate-950 font-bold transition shadow-lg shadow-emerald-500/20 whitespace-nowrap"
+            >
+              {installing ? 'Detecting branch…' : 'Install on GitHub →'}
+            </button>
+          </div>
+          {installError && (
+            <p className="mt-3 text-sm text-red-400">{installError}</p>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-400">
+            <span>After committing the workflow:</span>
+            <button
+              onClick={handleSecretsRedirect}
+              className="text-emerald-300 hover:text-emerald-200 underline underline-offset-2"
+            >
+              → Add ADAL_API_KEY secret
+            </button>
+            <a
+              href="https://adal.sylph.ai/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-slate-400 hover:text-emerald-300"
+            >
+              (get a key)
+            </a>
+          </div>
+        </div>
+
+        <div className="text-center text-xs uppercase tracking-wider text-slate-500 mb-6">
+          — or copy manually —
+        </div>
 
         {/* One-line installer */}
         <div className="mb-10">
