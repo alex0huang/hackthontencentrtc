@@ -161,11 +161,44 @@ fi
 if printf '%s' "$OUTPUT" | grep -qE '^VERDICT:[[:space:]]*BLOCK'; then
   say "❌ Critical security issues found. Push BLOCKED."
   say "   Bypass: git push --no-verify"
+  COMMENT_SHA="${COMMENT_SHA:-$(git rev-parse HEAD 2>/dev/null || true)}"
+  [ -n "$COMMENT_SHA" ] && post_commit_comment "$COMMENT_SHA" "BLOCK" || true
   exit 1
 fi
 
+post_commit_comment() {
+  # Post the AdaL review as a GitHub commit comment (best-effort).
+  # Requires `gh` CLI installed + authenticated. Silently skips otherwise.
+  local sha="$1"
+  local verdict="$2"
+  command -v gh >/dev/null 2>&1 || { say "gh CLI not found; skipping comment."; return 0; }
+  gh auth status >/dev/null 2>&1 || { say "gh not authenticated; skipping comment."; return 0; }
+
+  local repo_slug
+  repo_slug="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
+  [ -z "$repo_slug" ] && { say "Could not detect GitHub repo; skipping comment."; return 0; }
+
+  local emoji="✅"
+  [ "$verdict" = "BLOCK" ] && emoji="❌"
+
+  local body
+  body="$(printf '<!-- adal-guard:commit-review -->\n# %s AdaL Security Review\n\n_Commit: `%s`_\n\n%s\n\n---\n_Posted by AdaL pre-push hook_' \
+    "$emoji" "${sha:0:7}" "$OUTPUT")"
+
+  if gh api "repos/$repo_slug/commits/$sha/comments" \
+       -f body="$body" >/dev/null 2>&1; then
+    say "💬 Posted review as commit comment on $repo_slug@${sha:0:7}."
+  else
+    say "Could not post commit comment (non-fatal)."
+  fi
+}
+
+# Use the most recent local SHA we saw on stdin for the comment target.
+COMMENT_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+
 if printf '%s' "$OUTPUT" | grep -qE '^VERDICT:[[:space:]]*PASS'; then
   say "✅ Security review passed."
+  [ -n "$COMMENT_SHA" ] && post_commit_comment "$COMMENT_SHA" "PASS" || true
   exit 0
 fi
 
