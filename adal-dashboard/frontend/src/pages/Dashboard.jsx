@@ -112,9 +112,15 @@ export default function Dashboard() {
             </div>
             <div className="text-xs text-slate-500">@{me.login}</div>
           </div>
+          <a
+            href="/#install"
+            className="ml-3 px-3 py-1.5 text-sm rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold transition"
+          >
+            + Install on repo
+          </a>
           <button
             onClick={logout}
-            className="ml-3 text-sm text-slate-400 hover:text-white"
+            className="ml-1 text-sm text-slate-400 hover:text-white"
           >
             Logout
           </button>
@@ -124,11 +130,16 @@ export default function Dashboard() {
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
         {/* Summary */}
         {findings && (
-          <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <section className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <SummaryCard
               label="Total reviews"
               value={findings.count}
               accent="text-slate-100"
+            />
+            <SummaryCard
+              label="Blocked pushes"
+              value={findings.blocked_count}
+              accent="text-red-200"
             />
             <SummaryCard
               label="Critical"
@@ -273,32 +284,48 @@ function FindingCard({ f }) {
     warnings: f.warnings?.length || 0,
     suggestions: f.suggestions?.length || 0,
   };
+  const kindLabel =
+    f.kind === "block"
+      ? { text: "blocked", color: "bg-red-500/20 text-red-200" }
+      : f.kind === "commit"
+      ? { text: "push", color: "bg-slate-800 text-slate-300" }
+      : { text: "pr", color: "bg-slate-800 text-slate-300" };
   const refLabel =
-    f.kind === "commit" ? f.ref_number : `PR #${f.ref_number}`;
+    f.kind === "commit"
+      ? f.ref_number
+      : f.kind === "block"
+      ? f.ref_number
+      : `PR #${f.ref_number}`;
+  const isExternalLink = f.kind !== "block";
 
   return (
     <div className={`rounded-xl border p-4 ${severityBadge(f.severity).replace("text-", "").replace("bg-", "border-").split(" ")[0]} bg-slate-900/60`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
-            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 uppercase tracking-wider text-[10px]">
-              {f.kind === "commit" ? "push" : "pr"}
+            <span className={`px-1.5 py-0.5 rounded uppercase tracking-wider text-[10px] ${kindLabel.color}`}>
+              {kindLabel.text}
             </span>
             <span className="font-mono">{f.repo}</span>
             <span>·</span>
-            <a
-              href={f.ref_url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-emerald-300 hover:text-emerald-200 font-mono"
-            >
-              {refLabel}
-            </a>
+            {isExternalLink ? (
+              <a
+                href={f.ref_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-emerald-300 hover:text-emerald-200 font-mono"
+              >
+                {refLabel}
+              </a>
+            ) : (
+              <span className="text-slate-300 font-mono">{refLabel}</span>
+            )}
             <span>·</span>
             <span>{f.created_at ? new Date(f.created_at).toLocaleString() : ""}</span>
           </div>
           <div className="font-medium text-slate-100 truncate">
-            {f.ref_title || (f.kind === "commit" ? "Commit review" : "Untitled PR")}
+            {f.ref_title ||
+              (f.kind === "commit" ? "Commit review" : f.kind === "block" ? "Blocked push" : "Untitled PR")}
           </div>
         </div>
         <div className="flex items-center gap-2">

@@ -42,6 +42,7 @@ PR_COMMENT_MARKER = "SecReviewer Report"
 COMMIT_COMMENT_MARKER = "adal-guard:commit-review"
 WORKFLOW_PATH = ".github/workflows/sec-review.yml"
 PREPUSH_HOOK_PATH = ".git/hooks/pre-push"  # informational only
+SEC_REVIEW_LOG = Path.home() / ".adal" / "sec-review.log"
 
 
 # -------- db --------
@@ -442,9 +443,80 @@ async def _collect_commit_findings(
     return out
 
 
+_RUN_HEADER_RE = re.compile(
+    r"\[adal-guard\][^\n]*Running AdaL security review before pushing to (\S+)\s*\(([^)]+)\)"
+)
+
+
+def _collect_blocked_pushes() -> list[dict]:
+    """Parse ~/.adal/sec-review.log into one record per pre-push review attempt.
+
+    The hook appends sections like:
+      [adal-guard] 🛡️  Running AdaL security review before pushing to origin (URL)...
+      [adal-guard] Calling adal (may take 30-90s)...
+      VERDICT: BLOCK
+      ... markdown findings ...
+      [adal-guard] ❌ Critical security issues found. Push BLOCKED.
+    """
+    if not SEC_REVIEW_LOG.exists():
+        return []
+    text = SEC_REVIEW_LOG.read_text(errors="ignore")
+    mtime_iso = (
+        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(SEC_REVIEW_LOG.stat().st_mtime))
+    )
+
+    blocks: list[dict] = []
+    current: Optional[dict] = None
+    for line in text.splitlines():
+        m = _RUN_HEADER_RE.search(line)
+        if m:
+            if current is not None:
+                blocks.append(current)
+            url = m.group(2)
+            slug_match = re.search(r"github\.com[:/]([^/]+)/([^/.]+)", url)
+            repo = (
+                f"{slug_match.group(1)}/{slug_match.group(2)}" if slug_match else url
+            )
+            current = {
+                "remote": m.group(1),
+                "url": url,
+                "repo": repo,
+                "lines": [],
+            }
+        elif current is not None:
+            current["lines"].append(line)
+    if current is not None:
+        blocks.append(current)
+
+    out: list[dict] = []
+    for i, b in enumerate(blocks):
+        body = "\n".join(b["lines"])
+        parsed = parse_secreviewer_comment(body)
+        if not parsed["verdict"] and not (
+            parsed["critical"] or parsed["warnings"] or parsed["suggestions"]
+        ):
+            continue
+        out.append(
+            {
+                "kind": "block",
+                "repo": b["repo"],
+                "ref_number": f"local#{len(blocks) - i}",
+                "ref_title": f"Blocked push to {b['remote']}",
+                "ref_url": b["url"],
+                "comment_url": None,
+                "created_at": mtime_iso,
+                "author": "pre-push hook",
+                "severity": _severity_for(parsed),
+                "raw": body,
+                **parsed,
+            }
+        )
+    return out
+
+
 @app.get("/findings")
 async def findings(user=Depends(current_user)):
-    """Aggregate SecReviewer findings from BOTH PR comments and commit comments."""
+    """Aggregate SecReviewer findings from PR comments, commit comments, and local blocked pushes."""
     headers = {
         "Authorization": f"Bearer {user['access_token']}",
         "Accept": "application/vnd.github+json",
@@ -452,10 +524,12 @@ async def findings(user=Depends(current_user)):
     async with httpx.AsyncClient(headers=headers, timeout=30) as client:
         pr_items = await _collect_pr_findings(client, user["login"])
         commit_items = await _collect_commit_findings(client, user["login"])
-    out = pr_items + commit_items
+    block_items = _collect_blocked_pushes()
+    out = pr_items + commit_items + block_items
     out.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     return {
         "count": len(out),
+        "blocked_count": sum(1 for f in out if f.get("kind") == "block"),
         "total_critical": sum(len(f["critical"]) for f in out),
         "total_warnings": sum(len(f["warnings"]) for f in out),
         "total_suggestions": sum(len(f["suggestions"]) for f in out),
