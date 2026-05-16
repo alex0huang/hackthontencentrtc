@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # AdaL Security Guard — one-shot installer
 # Usage (from inside a target git repo):
-#   curl -fsSL https://raw.githubusercontent.com/alex0huang/hackthontencentrtc/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/alex0huang/hackthonadal/main/install.sh | bash
 #
 # What it does:
 #   1. Verifies prerequisites (git repo, node >= 20)
