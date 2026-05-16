@@ -65,3 +65,26 @@ def read_upload(filename: str) -> bytes:
     if not candidate.is_file():
         raise FileNotFoundError(filename)
     return candidate.read_bytes()
+
+
+def list_users_by_role(role: str) -> list[tuple]:
+    """Return all users with the given role, using a parameterized query."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute(
+            "SELECT id, username FROM users WHERE role = ? ORDER BY username",
+            (role,),
+        )
+        return cursor.fetchall()
+
+
+def issue_session_token(user_id: int) -> str:
+    """Issue a signed, time-bound session token using an env-loaded HMAC key."""
+    import secrets
+    import time
+
+    signing_key = _require_env("SESSION_SIGNING_KEY").encode("utf-8")
+    nonce = secrets.token_hex(16)
+    expiry = int(time.time()) + 3600  # 1 hour
+    payload = f"{user_id}.{expiry}.{nonce}".encode("utf-8")
+    signature = hmac.new(signing_key, payload, hashlib.sha256).hexdigest()
+    return f"{payload.decode()}.{signature}"
