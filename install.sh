@@ -185,13 +185,25 @@ post_commit_comment() {
   body="$(printf '<!-- adal-guard:commit-review -->\n# %s AdaL Security Review\n\n_Commit: `%s`_\n\n%s\n\n---\n_Posted by AdaL pre-push hook_' \
     "$emoji" "${sha:0:7}" "$OUTPUT")"
 
-  local gh_err
-  gh_err="$(printf '%s' "$body" | gh api "repos/$repo_slug/commits/$sha/comments" \
-       --method POST --field body=@- 2>&1 >/dev/null)" || {
-    say "Could not post commit comment (non-fatal): ${gh_err:0:200}"
-    return 0
-  }
-  say "💬 Posted review as commit comment on $repo_slug@${sha:0:7}."
+  # Push hasn't completed yet — defer the comment to a background subshell
+  # that waits for the commit to appear on the remote, then posts.
+  (
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      sleep 2
+      if gh api "repos/$repo_slug/commits/$sha" >/dev/null 2>&1; then
+        if printf '%s' "$body" | gh api "repos/$repo_slug/commits/$sha/comments" \
+             --method POST --field body=@- >/dev/null 2>&1; then
+          echo "[adal-guard] 💬 Posted review as commit comment on $repo_slug@${sha:0:7}." \
+            >> "$LOG_FILE" 2>/dev/null || true
+          exit 0
+        fi
+      fi
+    done
+    echo "[adal-guard] Could not post commit comment after retries (non-fatal)." \
+      >> "$LOG_FILE" 2>/dev/null || true
+  ) >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+  say "💬 Comment will be posted on $repo_slug@${sha:0:7} after push completes (see log)."
 }
 
 # Use the most recent local SHA we saw on stdin for the comment target.
