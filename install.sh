@@ -185,12 +185,13 @@ post_commit_comment() {
   body="$(printf '<!-- adal-guard:commit-review -->\n# %s AdaL Security Review\n\n_Commit: `%s`_\n\n%s\n\n---\n_Posted by AdaL pre-push hook_' \
     "$emoji" "${sha:0:7}" "$OUTPUT")"
 
-  if gh api "repos/$repo_slug/commits/$sha/comments" \
-       -f body="$body" >/dev/null 2>&1; then
-    say "💬 Posted review as commit comment on $repo_slug@${sha:0:7}."
-  else
-    say "Could not post commit comment (non-fatal)."
-  fi
+  local gh_err
+  gh_err="$(printf '%s' "$body" | gh api "repos/$repo_slug/commits/$sha/comments" \
+       --method POST --field body=@- 2>&1 >/dev/null)" || {
+    say "Could not post commit comment (non-fatal): ${gh_err:0:200}"
+    return 0
+  }
+  say "💬 Posted review as commit comment on $repo_slug@${sha:0:7}."
 }
 
 # Use the most recent local SHA we saw on stdin for the comment target.
