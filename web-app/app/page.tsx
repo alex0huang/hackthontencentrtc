@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+const ONE_CLICK_INSTALL = `curl -fsSL https://raw.githubusercontent.com/alex0huang/hackthonadal/main/install.sh | bash`;
+
 const INSTALL_YAML = `name: SecReviewer
 
 on:
@@ -47,11 +49,18 @@ jobs:
 
 export default function Home() {
   const [copied, setCopied] = useState(false);
+  const [copiedOneClick, setCopiedOneClick] = useState(false);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(INSTALL_YAML);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyOneClick = async () => {
+    await navigator.clipboard.writeText(ONE_CLICK_INSTALL);
+    setCopiedOneClick(true);
+    setTimeout(() => setCopiedOneClick(false), 2000);
   };
 
   const scrollToInstall = () => {
@@ -82,7 +91,9 @@ export default function Home() {
             Get Started →
           </button>
           <a
-            href="#"
+            href="https://github.com/alex0huang/hackthonadal"
+            target="_blank"
+            rel="noreferrer"
             className="px-8 py-3.5 rounded-lg border border-slate-700 hover:border-slate-500 hover:bg-slate-800/50 text-slate-100 font-semibold transition"
           >
             View on GitHub
@@ -113,6 +124,32 @@ export default function Home() {
       <section id="install" className="px-6 py-20 max-w-5xl mx-auto">
         <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">One-click install</h2>
         <p className="text-center text-slate-400 mb-10">Copy, paste, ship. No SDK, no config.</p>
+
+        {/* One-line installer */}
+        <div className="mb-10">
+          <p className="text-center text-emerald-300 text-sm font-semibold mb-3 uppercase tracking-wider">⚡ Fastest: pre-push security guard</p>
+          <p className="text-center text-slate-400 text-sm mb-4">Run this inside any git repo — installs a pre-push hook that reviews every push.</p>
+          <div className="relative rounded-xl bg-slate-950 border border-emerald-500/40 overflow-hidden shadow-lg shadow-emerald-500/10">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-700">
+              <span className="text-xs text-slate-500 font-mono">Terminal</span>
+              <button
+                onClick={handleCopyOneClick}
+                className="px-3 py-1 text-xs rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold transition"
+              >
+                {copiedOneClick ? '✓ Copied!' : 'Copy'}
+              </button>
+            </div>
+            <pre className="p-5 text-sm overflow-x-auto text-emerald-200 font-mono">
+              <code>$ {ONE_CLICK_INSTALL}</code>
+            </pre>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 my-10">
+          <div className="flex-1 h-px bg-slate-700" />
+          <span className="text-slate-500 text-sm">or use GitHub Actions</span>
+          <div className="flex-1 h-px bg-slate-700" />
+        </div>
 
         <div className="relative rounded-2xl bg-slate-950 border border-slate-700 overflow-hidden shadow-2xl">
           <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-700">
@@ -201,7 +238,7 @@ export default function Home() {
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-500">
           <div>Built at SylphAI Hackathon · Powered by AdaL · MIT License</div>
           <div className="flex gap-6">
-            <a href="#" className="hover:text-emerald-300 transition">GitHub</a>
+            <a href="https://github.com/alex0huang/hackthonadal" target="_blank" rel="noreferrer" className="hover:text-emerald-300 transition">GitHub</a>
             <a href="https://adalagent.ai" className="hover:text-emerald-300 transition">AdaL</a>
           </div>
         </div>
