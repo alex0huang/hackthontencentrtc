@@ -1,5 +1,5 @@
 # SecReviewer — drop this file at .github/workflows/sec-review.yml
-# Then add ANTHROPIC_API_KEY to your repo secrets.
+# Then add ADAL_API_KEY to your repo secrets.
 name: SecReviewer
 
 on:
@@ -23,7 +23,7 @@ jobs:
 
       - name: Run SecReviewer
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ADAL_API_KEY: ${{ secrets.ADAL_API_KEY }}
         run: |
           git diff origin/${{ github.base_ref }}...HEAD > pr.diff
           [ -s pr.diff ] || { echo "No diff"; exit 0; }

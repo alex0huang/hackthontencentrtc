@@ -22,7 +22,7 @@ jobs:
       - run: npm install -g @sylphai/adal-cli
       - name: Run SecReviewer
         env:
-          ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
+          ADAL_API_KEY: \${{ secrets.ADAL_API_KEY }}
         run: |
           git diff origin/\${{ github.base_ref }}...HEAD > pr.diff
           [ -s pr.diff ] || exit 0
@@ -96,7 +96,7 @@ export default function Home() {
         <div className="grid md:grid-cols-3 gap-6">
           {[
             { icon: '📋', title: 'Add to your repo', desc: 'Copy our workflow file into .github/workflows/' },
-            { icon: '🔑', title: 'Set your API key', desc: 'Add ANTHROPIC_API_KEY to repo secrets' },
+            { icon: '🔑', title: 'Set your API key', desc: 'Add ADAL_API_KEY to repo secrets' },
             { icon: '✅', title: 'Open a PR', desc: 'SecReviewer comments on every pull request automatically' },
           ].map((step, i) => (
             <div key={i} className="p-8 rounded-2xl bg-slate-800/40 border border-slate-700/60 hover:border-emerald-500/40 transition">
@@ -136,7 +136,7 @@ export default function Home() {
 
         <ol className="mt-8 space-y-3 text-slate-300">
           <li><span className="text-emerald-400 font-mono">1.</span> Create <code className="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 text-sm">.github/workflows/sec-review.yml</code> and paste the YAML above.</li>
-          <li><span className="text-emerald-400 font-mono">2.</span> Go to <strong>Settings → Secrets → Actions</strong> and add <code className="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 text-sm">ANTHROPIC_API_KEY</code> (<a className="text-emerald-300 underline" href="https://console.anthropic.com/" target="_blank" rel="noreferrer">get one here</a>).</li>
+          <li><span className="text-emerald-400 font-mono">2.</span> Go to <strong>Settings → Secrets → Actions</strong> and add <code className="px-2 py-0.5 rounded bg-slate-800 text-emerald-300 text-sm">ADAL_API_KEY</code> (<a className="text-emerald-300 underline" href="https://adal.sylph.ai/" target="_blank" rel="noreferrer">get one here</a>).</li>
           <li><span className="text-emerald-400 font-mono">3.</span> Open a PR. Done.</li>
         </ol>
       </section>

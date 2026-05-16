@@ -38,7 +38,7 @@ SecReviewer wraps that capability into a 30-second install.
 
 ### What the user does
 1. Paste one YAML file
-2. Add `ANTHROPIC_API_KEY` to repo secrets
+2. Add `ADAL_API_KEY` to repo secrets
 3. Open a PR
 
 ### What they get

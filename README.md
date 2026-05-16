@@ -31,11 +31,11 @@ curl -o .github/workflows/sec-review.yml \
   https://raw.githubusercontent.com/your-org/sec-reviewer/main/install/sec-review.yml
 ```
 
-**2. Add your Anthropic API key** at *Settings → Secrets and variables → Actions*:
+**2. Add your AdaL API key** at *Settings → Secrets and variables → Actions*:
 
 | Name                  | Value                                                                |
 | --------------------- | -------------------------------------------------------------------- |
-| `ANTHROPIC_API_KEY`   | Get one at [console.anthropic.com](https://console.anthropic.com)    |
+| `ADAL_API_KEY`       | Get one at [adal.sylph.ai](https://adal.sylph.ai) (uses your AdaL account quota) |
 
 **3. Open a PR.** SecReviewer comments automatically.
 
@@ -86,7 +86,7 @@ curl -o .github/workflows/sec-review.yml \
 
 Required:
 
-- `ANTHROPIC_API_KEY` — your [Anthropic API key](https://console.anthropic.com).
+- `ADAL_API_KEY` — your [AdaL API key](https://adal.sylph.ai) (routes Claude via your AdaL account quota).
 
 Optional (edit the workflow YAML directly):
 

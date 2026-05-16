@@ -30,7 +30,7 @@
 1. Open landing page (sec-reviewer.vercel.app)
 2. Click **Copy** on the install block — show "✓ Copied!" feedback
 3. Paste into `.github/workflows/sec-review.yml`
-4. GitHub UI: Settings → Secrets → add `ANTHROPIC_API_KEY`
+4. GitHub UI: Settings → Secrets → add `ADAL_API_KEY`
 5. Open a PR with the vulnerable `examples/sql-injection.py`
 6. Watch the Actions tab → Workflow runs → Comment appears
 
