@@ -39,12 +39,33 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const MARKER = '<!-- adal-guard:sec-review -->';
             const review = fs.existsSync('review.md')
               ? fs.readFileSync('review.md', 'utf8')
               : '_No review generated._';
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `# 🛡️ SecReviewer Report\n\n${review}\n\n---\n_Powered by [AdaL](https://adalagent.ai)_`
+            const sha = (context.payload.pull_request && context.payload.pull_request.head.sha) || context.sha;
+            const body = `${MARKER}\n# 🛡️ SecReviewer Report\n\n_Commit: \`${sha.slice(0,7)}\` · Updated: ${new Date().toISOString()}_\n\n${review}\n\n---\n_Powered by [AdaL](https://adalagent.ai)_`;
+
+            // Find existing AdaL comment and edit it; otherwise create a new one.
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
             });
+            const existing = comments.find(c => c.body && c.body.includes(MARKER));
+            try {
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+                core.info(`Updated existing AdaL comment #${existing.id}`);
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number, body });
+                core.info('Created new AdaL comment');
+              }
+            } catch (err) {
+              // Fork PRs grant GITHUB_TOKEN read-only perms → comment write fails.
+              // Don't fail the job; surface the review in the logs instead.
+              core.warning(`Could not post PR comment (likely a fork PR with read-only token): ${err.message}`);
+              core.startGroup('AdaL Security Review (comment fallback)');
+              core.info(review);
+              core.endGroup();
+            }
