@@ -1,6 +1,11 @@
 # SecReviewer 🛡️
 
+[![🏆 AdaL Track — 1st Place](https://img.shields.io/badge/🏆_AdaL_Track-1st_Place-gold?style=for-the-badge&labelColor=1f2937)](https://adalagent.ai)
+[![Powered by AdaL](https://img.shields.io/badge/Powered_by-AdaL-ec4899?style=for-the-badge)](https://adalagent.ai)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./sec-reviewer/LICENSE)
+
 > **AI-powered security guard for every `git push`. Built on AdaL.**
+> 🥇 **Winner — AdaL Track, SylphAI Hackathon 2026**
 
 AI coding agents are powerful — but they have a permission problem. People hit `--yolo`, click "allow always", and stop reading what the agent is actually doing. Then an API key gets committed, an auth check gets removed, or SQL injection gets shipped — and nobody notices until production is on fire.
 
